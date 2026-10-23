@@ -6,28 +6,37 @@ using UnityEngine.UI;
 
 public class TalkManager : MonoBehaviour
 {
-    public Image dialogueBox;
+    [SerializeField] private Image dialogueBox;
 
-    public TMP_Text ScriptText_dialogue;
-    public string[] dialogueLines;
-    public int currentLineIndex = 0;
+    [SerializeField] private TMP_Text ScriptText_dialogue;
+    private string[] dialogueLines;
+    private int currentLineIndex;
+    private bool canAdvanceDialogue;
 
-    public InputAction nextDialogueAction;
+    [SerializeField] private InputAction nextDialogueAction;
 
-    public bool isDialogueActive = false;
+    public bool isDialogueActive { get; private set; }
 
-    PlayerController playerController;
+    [SerializeField] private PlayerController playerController;
 
-    void Start()
+    private void Awake()
     {
-        dialogueBox.gameObject.SetActive(false);
-
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        playerController = player.GetComponent<PlayerController>();
+        if (playerController == null)
+            playerController = FindFirstObjectByType<PlayerController>();
+        if (dialogueBox == null || ScriptText_dialogue == null || playerController == null)
+            Debug.LogError("TalkManager requires a dialogue box, text, and PlayerController.", this);
+        if (dialogueBox != null)
+            dialogueBox.gameObject.SetActive(false);
     }
-    void Update()
+
+    private void OnDisable()
     {
-        if (!isDialogueActive)
+        nextDialogueAction.Disable();
+    }
+
+    private void Update()
+    {
+        if (!isDialogueActive || !canAdvanceDialogue)
             return;
         if (nextDialogueAction.triggered)
         {
@@ -42,17 +51,18 @@ public class TalkManager : MonoBehaviour
             Debug.LogWarning("Dialogue lines are empty or null.");
             return;
         }
-        // 플레이어 잠금
-        playerController.PlayerLock();
-        // 대화 진행을 위한 입력 액션 활성화
-        nextDialogueAction.Enable();
+        if (isDialogueActive)
+            return;
 
-        dialogueBox.gameObject.SetActive(true);
-        
-        isDialogueActive = true;
+        playerController.PlayerLock();
+        nextDialogueAction.Enable();
         currentLineIndex = 0;
-        dialogueLines = lines;
-        
+        dialogueLines = (string[])lines.Clone();
+        canAdvanceDialogue = false;
+        ScriptText_dialogue.text = dialogueLines[currentLineIndex++];
+        dialogueBox.gameObject.SetActive(true);
+        isDialogueActive = true;
+        StartCoroutine(WaitForOpenInputRelease());
     }
 
     private void ShowNextDialogue()
@@ -71,24 +81,35 @@ public class TalkManager : MonoBehaviour
     private void CloseDialogue()
     {
         dialogueBox.gameObject.SetActive(false);
+        ScriptText_dialogue.text = string.Empty;
         isDialogueActive = false;
         currentLineIndex = 0;
         dialogueLines = null;
-        
+        canAdvanceDialogue = false;
         StartCoroutine(UnlockPlayerAfterInputReleased());
+    }
+
+    private IEnumerator WaitForOpenInputRelease()
+    {
+        // 상호작용에 사용한 F 입력으로 첫 대사가 넘어가지 않게 한다.
+        yield return null;
+        while (nextDialogueAction.IsPressed())
+            yield return null;
+
+        if (isDialogueActive)
+            canAdvanceDialogue = true;
     }
 
     private IEnumerator UnlockPlayerAfterInputReleased()
     {
+        // 대화 종료에 사용한 F 키가 상호작용 입력으로 재사용되지 않도록 뗄 때까지 기다린다.
         while (nextDialogueAction.IsPressed())
-        {
             yield return null;
-        }
 
         nextDialogueAction.Disable();
 
+        // 같은 입력 이벤트에서 바로 NPC 대화가 다시 시작되는 것을 막는다.
         yield return null;
-
         playerController.PlayerUnlock();
     }
 }
