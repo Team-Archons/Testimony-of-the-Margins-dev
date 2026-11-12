@@ -6,6 +6,8 @@ using UnityEngine.UI;
 
 public class TalkManager : MonoBehaviour
 {
+    public static TalkManager Instance { get; private set; }
+
     [SerializeField] private Image dialogueBox;
 
     [SerializeField] private TMP_Text ScriptText_dialogue;
@@ -21,12 +23,27 @@ public class TalkManager : MonoBehaviour
 
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+
         if (playerController == null)
             playerController = FindFirstObjectByType<PlayerController>();
         if (dialogueBox == null || ScriptText_dialogue == null || playerController == null)
             Debug.LogError("TalkManager requires a dialogue box, text, and PlayerController.", this);
         if (dialogueBox != null)
             dialogueBox.gameObject.SetActive(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     private void OnDisable()
